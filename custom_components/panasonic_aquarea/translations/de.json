@@ -1,0 +1,83 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Panasonic Aquarea Anmeldung",
+        "description": "Gib deine Aquarea Service Cloud-Zugangsdaten ein (aquarea-service.panasonic.com).",
+        "data": {
+          "username": "E-Mail-Adresse",
+          "password": "Passwort"
+        }
+      },
+      "device": {
+        "title": "Gerät auswählen",
+        "description": "Es wurden mehrere Wärmepumpen gefunden. Wähle die gewünschte aus.",
+        "data": {
+          "device_guid": "Gerät"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Panasonic Aquarea neu authentifizieren",
+        "description": "Deine Aquarea-Sitzung ist abgelaufen. Bitte gib deine Zugangsdaten erneut ein.",
+        "data": {
+          "username": "E-Mail-Adresse",
+          "password": "Passwort"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zur Aquarea Service Cloud nicht möglich. Überprüfe deine Internetverbindung.",
+      "invalid_auth": "Ungültige E-Mail-Adresse oder falsches Passwort.",
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten. Überprüfe die Logs für Details."
+    },
+    "abort": {
+      "already_configured": "Dieses Gerät ist bereits konfiguriert.",
+      "no_devices": "In diesem Aquarea-Konto wurden keine Geräte gefunden.",
+      "reauth_successful": "Die erneute Authentifizierung war erfolgreich."
+    }
+  },
+  "entity": {
+    "climate": {
+      "zone_1": {
+        "name": "Zone 1",
+        "state": {
+          "off": "Aus",
+          "heat": "Heizen",
+          "cool": "Kühlen",
+          "auto": "Automatik"
+        }
+      },
+      "zone_2": {
+        "name": "Zone 2",
+        "state": {
+          "off": "Aus",
+          "heat": "Heizen",
+          "cool": "Kühlen",
+          "auto": "Automatik"
+        }
+      }
+    },
+    "sensor": {
+      "outdoor_temperature": {
+        "name": "Außentemperatur"
+      },
+      "operation_mode": {
+        "name": "Betriebsmodus"
+      },
+      "error_status": {
+        "name": "Fehlerstatus"
+      }
+    },
+    "switch": {
+      "tank_boost": {
+        "name": "Speicher-Schnellladung"
+      },
+      "force_heater": {
+        "name": "Zusatzheizung"
+      },
+      "holiday_mode": {
+        "name": "Urlaubsmodus"
+      }
+    }
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Panasonic Aquarea Login",
+        "description": "Enter your Aquarea Service Cloud credentials (aquarea-service.panasonic.com).",
+        "data": {
+          "username": "E-mail address",
+          "password": "Password"
+        }
+      },
+      "device": {
+        "title": "Select Device",
+        "description": "Multiple heat pumps were found. Select the one you want to add.",
+        "data": {
+          "device_guid": "Device"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate Panasonic Aquarea",
+        "description": "Your Aquarea session has expired. Please re-enter your credentials.",
+        "data": {
+          "username": "E-mail address",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the Aquarea Service Cloud. Check your internet connection.",
+      "invalid_auth": "Invalid username or password.",
+      "unknown": "An unexpected error occurred. Check the logs for details."
+    },
+    "abort": {
+      "already_configured": "This device is already configured.",
+      "no_devices": "No devices were found in this Aquarea account.",
+      "reauth_successful": "Re-authentication was successful."
+    }
+  },
+  "entity": {
+    "climate": {
+      "zone_1": {
+        "name": "Zone 1",
+        "state": {
+          "off": "Off",
+          "heat": "Heating",
+          "cool": "Cooling",
+          "auto": "Auto"
+        }
+      },
+      "zone_2": {
+        "name": "Zone 2",
+        "state": {
+          "off": "Off",
+          "heat": "Heating",
+          "cool": "Cooling",
+          "auto": "Auto"
+        }
+      }
+    },
+    "sensor": {
+      "outdoor_temperature": {
+        "name": "Outdoor Temperature"
+      },
+      "operation_mode": {
+        "name": "Operation Mode"
+      },
+      "error_status": {
+        "name": "Error Status"
+      }
+    },
+    "switch": {
+      "tank_boost": {
+        "name": "Tank Boost Heating"
+      },
+      "force_heater": {
+        "name": "Auxiliary Heater"
+      },
+      "holiday_mode": {
+        "name": "Holiday Mode"
+      }
+    }
+  }
+}

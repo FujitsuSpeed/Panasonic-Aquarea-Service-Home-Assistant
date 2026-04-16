@@ -28,7 +28,7 @@ APP_REDIRECT_URI = (
 AUTH0_CLIENT_B64 = (
     "eyJuYW1lIjoiQXV0aDAuQW5kcm9pZCIsImVudiI6eyJhbmRyb2lkIjoiMzAifSwidmVyc2lvbiI6IjIuOS4zIn0="
 )
-OAUTH_SCOPE = "openid offline_access comfortcloud.control a2w.control"
+OAUTH_SCOPE = "openid offline_access a2w.control"
 OAUTH_AUDIENCE = "https://digital.panasonic.com/api/v2/"
 OAUTH_TENANT = "pdpauthglb-a1"
 

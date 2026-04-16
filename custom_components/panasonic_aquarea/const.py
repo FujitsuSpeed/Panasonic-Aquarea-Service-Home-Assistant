@@ -16,7 +16,8 @@ API_USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/120.0.0.0 Safari/537.36"
 )
-API_APP_TYPE = "2"
+API_APP_TYPE = "1"
+API_APP_VERSION = "1.35.0"
 
 # Update interval in seconds
 DEFAULT_SCAN_INTERVAL = 60

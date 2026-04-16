@@ -13,6 +13,7 @@ from .const import (
     API_DEVICE_STATUS_PATH,
     API_USER_AGENT,
     API_APP_TYPE,
+    API_APP_VERSION,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -266,6 +267,7 @@ class AquareaClient:
             "Accept-Language": "en-US,en;q=0.9",
             "Content-Type": "application/json",
             "X-APP-TYPE": API_APP_TYPE,
+            "X-APP-VERSION": API_APP_VERSION,
             "Referer": f"{API_BASE_URL}/",
             "Origin": API_BASE_URL,
         }

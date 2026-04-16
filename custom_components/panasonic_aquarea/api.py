@@ -116,15 +116,25 @@ class AquareaClient:
             state = secrets.token_urlsafe(32)
 
             _LOGGER.debug("OAuth step 1: authorize (PKCE)")
-            csrf = await self._oauth_authorize(challenge, state)
+            # Returns (csrf_token, direct_code).
+            # direct_code is set when Auth0 already has an active session
+            # and skips the login form entirely.
+            csrf, direct_code = await self._oauth_authorize(challenge, state)
 
-            _LOGGER.debug("OAuth step 2: submit credentials")
-            form_fields = await self._oauth_credentials(
-                username, password, csrf, state, challenge
-            )
+            if direct_code:
+                _LOGGER.debug(
+                    "OAuth: Auth0 returned code directly (active session) – "
+                    "skipping credential steps"
+                )
+                auth_code = direct_code
+            else:
+                _LOGGER.debug("OAuth step 2: submit credentials")
+                form_fields = await self._oauth_credentials(
+                    username, password, csrf, state, challenge
+                )
 
-            _LOGGER.debug("OAuth step 3: follow callback chain")
-            auth_code = await self._oauth_callback(form_fields)
+                _LOGGER.debug("OAuth step 3: follow callback chain")
+                auth_code = await self._oauth_callback(form_fields)
 
             _LOGGER.debug("OAuth step 4: exchange code for token")
             tokens = await self._oauth_token(auth_code, verifier)
@@ -324,12 +334,21 @@ class AquareaClient:
 
     # ─── Internal: OAuth2 PKCE flow ───────────────────────────────────────────
 
-    async def _oauth_authorize(self, challenge: str, state: str) -> str:
+    async def _oauth_authorize(
+        self, challenge: str, state: str
+    ) -> tuple[str | None, str | None]:
         """Step 1 – GET /authorize; follow HTTP redirects manually.
 
+        Returns (csrf_token, direct_code):
+          - (csrf, None)  – Auth0 showed the login form; caller must submit
+                            credentials (steps 2 + 3).
+          - (None, code)  – Auth0 already had an active session and issued
+                            the authorization code immediately; caller can
+                            skip directly to the token exchange (step 4).
+
         Using allow_redirects=False avoids aiohttp raising
-        NonHttpUrlRedirectClientError when Auth0 ever redirects directly
-        to the panasonic-iot-cfc:// custom URI scheme.
+        NonHttpUrlRedirectClientError when Auth0 redirects to the
+        panasonic-iot-cfc:// custom URI scheme.
         """
         params = {
             "client_id": APP_CLIENT_ID,
@@ -352,17 +371,17 @@ class AquareaClient:
                     "Auth0-Client": AUTH0_CLIENT_B64,
                 },
                 ssl=True,
-                allow_redirects=False,  # handle redirects manually
+                allow_redirects=False,
             ) as resp:
                 status = resp.status
                 location = resp.headers.get("Location", "")
                 _LOGGER.debug(
-                    "Authorize hop %d: %s → %d  location=%s",
-                    attempt + 1, current_url[:60], status, location[:80],
+                    "Authorize hop %d: status=%d  location=%s",
+                    attempt + 1, status, location[:200],
                 )
 
                 if status == 200:
-                    # Reached the Auth0 login page – done
+                    # Auth0 showed the login form – need to submit credentials
                     break
 
                 if status in (301, 302, 303, 307, 308):
@@ -370,13 +389,12 @@ class AquareaClient:
                         raise AquareaAuthError(
                             "Empty Location header in authorize redirect"
                         )
-                    # Stop at custom URI scheme (no need to follow it here)
+
+                    # Custom URI scheme → Auth0 already has an active session
+                    # and is returning the authorization code directly.
                     if not location.startswith(("http://", "https://")):
-                        _LOGGER.debug(
-                            "Authorize: stopping at non-HTTP redirect: %s",
-                            location[:80],
-                        )
-                        break
+                        return None, self._extract_code_from_redirect(location)
+
                     current_url = (
                         location
                         if location.startswith("http")
@@ -391,20 +409,40 @@ class AquareaClient:
         else:
             raise AquareaAuthError("OAuth authorize: too many redirects")
 
-        # Extract _csrf cookie set during the redirect chain
+        # Auth0 showed the login form – extract the _csrf cookie
         csrf_value: str | None = None
         for cookie in self._session.cookie_jar:
-            _LOGGER.debug("Cookie after authorize: %s", cookie.key)
             if cookie.key == "_csrf":
                 csrf_value = cookie.value
                 break
 
         if not csrf_value:
             raise AquareaAuthError(
-                "No _csrf cookie after authorize – "
-                "OAUTH_AUDIENCE or APP_CLIENT_ID may be incorrect"
+                "No _csrf cookie after authorize. "
+                "Cookies present: "
+                + ", ".join(c.key for c in self._session.cookie_jar)
             )
-        return csrf_value
+        return csrf_value, None
+
+    @staticmethod
+    def _extract_code_from_redirect(location: str) -> str:
+        """Parse the OAuth authorization code from a custom-URI redirect URL."""
+        _LOGGER.debug("Extracting code from redirect: %s", location[:200])
+        parsed = urlparse(location)
+        params = parse_qs(parsed.query)
+
+        if "error" in params:
+            desc = params.get("error_description", params["error"])
+            raise AquareaAuthError(
+                f"OAuth error in redirect: {desc[0] if desc else 'unknown'}"
+            )
+
+        code_list = params.get("code")
+        if not code_list:
+            raise AquareaAuthError(
+                f"No 'code' parameter in redirect URI: {location[:300]}"
+            )
+        return code_list[0]
 
     async def _oauth_credentials(
         self,

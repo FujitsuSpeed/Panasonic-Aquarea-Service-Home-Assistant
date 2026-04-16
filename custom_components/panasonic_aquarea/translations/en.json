@@ -5,7 +5,7 @@
         "title": "Panasonic Aquarea Login",
         "description": "Enter your Aquarea Service Cloud credentials (aquarea-service.panasonic.com).",
         "data": {
-          "username": "E-mail address",
+          "username": "Username",
           "password": "Password"
         }
       },
@@ -20,7 +20,7 @@
         "title": "Re-authenticate Panasonic Aquarea",
         "description": "Your Aquarea session has expired. Please re-enter your credentials.",
         "data": {
-          "username": "E-mail address",
+          "username": "Username",
           "password": "Password"
         }
       }

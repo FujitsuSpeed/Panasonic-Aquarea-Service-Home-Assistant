@@ -5,7 +5,7 @@
         "title": "Panasonic Aquarea Anmeldung",
         "description": "Gib deine Aquarea Service Cloud-Zugangsdaten ein (aquarea-service.panasonic.com).",
         "data": {
-          "username": "E-Mail-Adresse",
+          "username": "Benutzername",
           "password": "Passwort"
         }
       },
@@ -20,7 +20,7 @@
         "title": "Panasonic Aquarea neu authentifizieren",
         "description": "Deine Aquarea-Sitzung ist abgelaufen. Bitte gib deine Zugangsdaten erneut ein.",
         "data": {
-          "username": "E-Mail-Adresse",
+          "username": "Benutzername",
           "password": "Passwort"
         }
       }

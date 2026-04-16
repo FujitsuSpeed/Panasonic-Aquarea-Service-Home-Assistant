@@ -4,14 +4,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-import homeassistant.helpers.config_validation as cv
 
 from .api import AquareaAuthError, AquareaApiError, AquareaClient, AquareaConnectionError
 from .const import (
@@ -32,13 +29,20 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 
 
 async def _validate_credentials(
-    hass: HomeAssistant, username: str, password: str
-) -> list[dict]:
-    """Log in and return the list of available devices."""
-    session = async_get_clientsession(hass)
-    client = AquareaClient(session)
-    await client.login(username, password)
-    return await client.get_devices(), client
+    username: str, password: str
+) -> tuple[list[dict], AquareaClient]:
+    """Log in and return (devices, client).
+
+    The caller is responsible for closing the client when it is no longer needed.
+    """
+    client = AquareaClient()
+    try:
+        await client.login(username, password)
+        devices = await client.get_devices()
+        return devices, client
+    except Exception:
+        await client.close()
+        raise
 
 
 class AquareaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -52,6 +56,11 @@ class AquareaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._devices: list[dict] = []
         self._client: AquareaClient | None = None
 
+    async def _close_client(self) -> None:
+        if self._client is not None:
+            await self._client.close()
+            self._client = None
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
@@ -62,31 +71,32 @@ class AquareaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             username = user_input[CONF_USERNAME]
             password = user_input[CONF_PASSWORD]
             try:
-                devices, client = await _validate_credentials(
-                    self.hass, username, password
-                )
+                devices, client = await _validate_credentials(username, password)
             except AquareaAuthError:
                 errors["base"] = "invalid_auth"
             except AquareaConnectionError:
                 errors["base"] = "cannot_connect"
-            except AquareaApiError:
-                errors["base"] = "unknown"
-            except Exception:  # noqa: BLE001
-                _LOGGER.exception("Unexpected exception during login")
+            except AquareaApiError as exc:
+                _LOGGER.error("Aquarea API error during login: %s", exc)
+                errors["base"] = "cannot_connect"
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.exception("Unexpected exception during Aquarea login: %s", exc)
                 errors["base"] = "unknown"
             else:
+                # Close previous client if user is retrying
+                await self._close_client()
                 self._username = username
                 self._password = password
                 self._devices = devices
                 self._client = client
 
                 if not devices:
+                    await self._close_client()
                     return self.async_abort(reason="no_devices")
 
                 if len(devices) == 1:
                     return await self._create_entry(devices[0])
 
-                # Multiple devices – let user pick
                 return await self.async_step_device()
 
         return self.async_show_form(
@@ -114,14 +124,14 @@ class AquareaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="device",
             data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_DEVICE_GUID): vol.In(device_options),
-                }
+                {vol.Required(CONF_DEVICE_GUID): vol.In(device_options)}
             ),
         )
 
     async def _create_entry(self, device: dict) -> FlowResult:
         """Finalise the config entry for a device."""
+        await self._close_client()
+
         device_guid = device["deviceGuid"]
         device_name = device.get("name") or DEFAULT_NAME
 
@@ -153,11 +163,14 @@ class AquareaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+            entry = self.hass.config_entries.async_get_entry(
+                self.context["entry_id"]
+            )
             username = user_input[CONF_USERNAME]
             password = user_input[CONF_PASSWORD]
             try:
-                await _validate_credentials(self.hass, username, password)
+                _, tmp_client = await _validate_credentials(username, password)
+                await tmp_client.close()
             except AquareaAuthError:
                 errors["base"] = "invalid_auth"
             except AquareaConnectionError:
@@ -167,7 +180,11 @@ class AquareaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 self.hass.config_entries.async_update_entry(
                     entry,
-                    data={**entry.data, CONF_USERNAME: username, CONF_PASSWORD: password},
+                    data={
+                        **entry.data,
+                        CONF_USERNAME: username,
+                        CONF_PASSWORD: password,
+                    },
                 )
                 await self.hass.config_entries.async_reload(entry.entry_id)
                 return self.async_abort(reason="reauth_successful")

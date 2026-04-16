@@ -115,10 +115,10 @@ class AquareaClient:
             state = secrets.token_urlsafe(32)
 
             _LOGGER.debug("OAuth step 1: authorize (PKCE)")
-            # Returns (csrf_token, direct_code).
-            # direct_code is set when Auth0 already has an active session
-            # and skips the login form entirely.
-            csrf, direct_code = await self._oauth_authorize(challenge, state)
+            # Returns (csrf, auth0_state, direct_code).
+            # direct_code is set when Auth0 already has an active session.
+            # auth0_state is Auth0's internal state (≠ our PKCE state).
+            csrf, auth0_state, direct_code = await self._oauth_authorize(challenge, state)
 
             if direct_code:
                 _LOGGER.debug(
@@ -129,7 +129,7 @@ class AquareaClient:
             else:
                 _LOGGER.debug("OAuth step 2: submit credentials")
                 form_fields = await self._oauth_credentials(
-                    username, password, csrf, state, challenge
+                    username, password, csrf, auth0_state
                 )
 
                 _LOGGER.debug("OAuth step 3: follow callback chain")
@@ -335,19 +335,19 @@ class AquareaClient:
 
     async def _oauth_authorize(
         self, challenge: str, state: str
-    ) -> tuple[str | None, str | None]:
+    ) -> tuple[str | None, str | None, str | None]:
         """Step 1 – GET /authorize; follow HTTP redirects manually.
 
-        Returns (csrf_token, direct_code):
-          - (csrf, None)  – Auth0 showed the login form; caller must submit
-                            credentials (steps 2 + 3).
-          - (None, code)  – Auth0 already had an active session and issued
-                            the authorization code immediately; caller can
-                            skip directly to the token exchange (step 4).
+        Returns (csrf_token, auth0_state, direct_code):
+          - (csrf, auth0_state, None) – Auth0 showed the login form.
+            auth0_state is Auth0's internal state extracted from the
+            /login?state=... redirect URL – must be passed back to
+            /usernamepassword/login, NOT our original PKCE state.
+          - (None, None, code) – Auth0 had an active session and issued
+            the code directly; skip to token exchange (step 4).
 
         Using allow_redirects=False avoids aiohttp raising
-        NonHttpUrlRedirectClientError when Auth0 redirects to the
-        panasonic-iot-cfc:// custom URI scheme.
+        NonHttpUrlRedirectClientError on panasonic-iot-cfc:// URIs.
         """
         params = {
             "client_id": APP_CLIENT_ID,
@@ -390,7 +390,7 @@ class AquareaClient:
 
                     # Custom URI scheme → Auth0 has active session, code returned directly
                     if location.startswith("panasonic-iot-cfc://"):
-                        return None, self._extract_code_from_redirect(location)
+                        return None, None, self._extract_code_from_redirect(location)
 
                     # Standard HTTP/relative redirect – keep following
                     current_url = (
@@ -407,7 +407,18 @@ class AquareaClient:
         else:
             raise AquareaAuthError("OAuth authorize: too many redirects")
 
-        # Auth0 showed the login form – extract the _csrf cookie
+        # Extract Auth0's internal state from the /login?state=... URL.
+        # This is NOT our PKCE state; Auth0 requires it echoed back in
+        # the /usernamepassword/login payload.
+        parsed_login_url = urlparse(current_url)
+        auth0_state = parse_qs(parsed_login_url.query).get("state", [None])[0]
+        if not auth0_state:
+            raise AquareaAuthError(
+                f"Could not extract Auth0 state from login URL: {current_url[:200]}"
+            )
+        _LOGGER.debug("Auth0 internal state extracted (length=%d)", len(auth0_state))
+
+        # Extract the _csrf cookie set by the login page
         csrf_value: str | None = None
         for cookie in self._session.cookie_jar:
             if cookie.key == "_csrf":
@@ -420,7 +431,7 @@ class AquareaClient:
                 "Cookies present: "
                 + ", ".join(c.key for c in self._session.cookie_jar)
             )
-        return csrf_value, None
+        return csrf_value, auth0_state, None
 
     @staticmethod
     def _extract_code_from_redirect(location: str) -> str:
@@ -447,10 +458,13 @@ class AquareaClient:
         username: str,
         password: str,
         csrf: str,
-        state: str,
-        challenge: str,
+        auth0_state: str,
     ) -> dict[str, str]:
-        """Step 2 – POST credentials; return hidden form fields from the response."""
+        """Step 2 – POST credentials; return hidden form fields from the response.
+
+        auth0_state must be Auth0's internal state from the /login?state=...
+        redirect URL, not our original PKCE state.
+        """
         url = f"{AUTH_BASE_URL}{AUTH_LOGIN_PATH}"
         payload = {
             "client_id": APP_CLIENT_ID,
@@ -459,7 +473,7 @@ class AquareaClient:
             "response_type": "code",
             "scope": OAUTH_SCOPE,
             "_csrf": csrf,
-            "state": state,
+            "state": auth0_state,
             "username": username,
             "password": password,
             "lang": "en",

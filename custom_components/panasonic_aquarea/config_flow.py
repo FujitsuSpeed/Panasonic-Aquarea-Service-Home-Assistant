@@ -72,9 +72,11 @@ class AquareaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             password = user_input[CONF_PASSWORD]
             try:
                 devices, client = await _validate_credentials(username, password)
-            except AquareaAuthError:
+            except AquareaAuthError as exc:
+                _LOGGER.warning("Aquarea auth error: %s", exc)
                 errors["base"] = "invalid_auth"
-            except AquareaConnectionError:
+            except AquareaConnectionError as exc:
+                _LOGGER.error("Aquarea connection error: %s", exc)
                 errors["base"] = "cannot_connect"
             except AquareaApiError as exc:
                 _LOGGER.error("Aquarea API error during login: %s", exc)

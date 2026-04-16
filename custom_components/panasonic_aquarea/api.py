@@ -138,7 +138,16 @@ class AquareaClient:
         except (AquareaAuthError, AquareaConnectionError):
             raise
         except aiohttp.ClientError as exc:
-            raise AquareaConnectionError(f"Network error during login: {exc}") from exc
+            _LOGGER.error(
+                "Network error during OAuth login (%s): %s",
+                type(exc).__name__, exc,
+            )
+            raise AquareaConnectionError(
+                f"Network error ({type(exc).__name__}): {exc}"
+            ) from exc
+        except Exception as exc:
+            _LOGGER.exception("Unexpected error during OAuth login: %s", exc)
+            raise AquareaConnectionError(f"Unexpected error: {exc}") from exc
 
     # ─── Public: Devices ──────────────────────────────────────────────────────
 
@@ -316,7 +325,12 @@ class AquareaClient:
     # ─── Internal: OAuth2 PKCE flow ───────────────────────────────────────────
 
     async def _oauth_authorize(self, challenge: str, state: str) -> str:
-        """Step 1 – GET /authorize and return the _csrf cookie value."""
+        """Step 1 – GET /authorize; follow HTTP redirects manually.
+
+        Using allow_redirects=False avoids aiohttp raising
+        NonHttpUrlRedirectClientError when Auth0 ever redirects directly
+        to the panasonic-iot-cfc:// custom URI scheme.
+        """
         params = {
             "client_id": APP_CLIENT_ID,
             "response_type": "code",
@@ -327,31 +341,70 @@ class AquareaClient:
             "state": state,
             "audience": OAUTH_AUDIENCE,
         }
-        url = (
-            f"{AUTH_BASE_URL}{AUTH_BASE_URL.split('/')[-1]}"  # keep base clean
-        )
-        url = f"{AUTH_BASE_URL}/authorize?{urlencode(params)}"
+        current_url = f"{AUTH_BASE_URL}/authorize?{urlencode(params)}"
+        _LOGGER.debug("Authorize URL (truncated): %s", current_url[:120])
 
-        async with self._session.get(
-            url,
-            headers={"User-Agent": AUTH_USER_AGENT, "Auth0-Client": AUTH0_CLIENT_B64},
-            ssl=True,
-            allow_redirects=True,
-        ) as resp:
-            if resp.status not in (200, 302):
-                body = await resp.text()
-                raise AquareaAuthError(
-                    f"OAuth authorize failed ({resp.status}): {body[:200]}"
+        for attempt in range(15):
+            async with self._session.get(
+                current_url,
+                headers={
+                    "User-Agent": AUTH_USER_AGENT,
+                    "Auth0-Client": AUTH0_CLIENT_B64,
+                },
+                ssl=True,
+                allow_redirects=False,  # handle redirects manually
+            ) as resp:
+                status = resp.status
+                location = resp.headers.get("Location", "")
+                _LOGGER.debug(
+                    "Authorize hop %d: %s → %d  location=%s",
+                    attempt + 1, current_url[:60], status, location[:80],
                 )
 
-        # Extract _csrf from cookie jar
-        for cookie in self._session.cookie_jar:
-            if cookie.key == "_csrf":
-                return cookie.value
+                if status == 200:
+                    # Reached the Auth0 login page – done
+                    break
 
-        raise AquareaAuthError(
-            "No _csrf cookie received from OAuth authorize endpoint"
-        )
+                if status in (301, 302, 303, 307, 308):
+                    if not location:
+                        raise AquareaAuthError(
+                            "Empty Location header in authorize redirect"
+                        )
+                    # Stop at custom URI scheme (no need to follow it here)
+                    if not location.startswith(("http://", "https://")):
+                        _LOGGER.debug(
+                            "Authorize: stopping at non-HTTP redirect: %s",
+                            location[:80],
+                        )
+                        break
+                    current_url = (
+                        location
+                        if location.startswith("http")
+                        else f"{AUTH_BASE_URL}{location}"
+                    )
+                    continue
+
+                body = await resp.text()
+                raise AquareaAuthError(
+                    f"Authorize step returned {status}: {body[:300]}"
+                )
+        else:
+            raise AquareaAuthError("OAuth authorize: too many redirects")
+
+        # Extract _csrf cookie set during the redirect chain
+        csrf_value: str | None = None
+        for cookie in self._session.cookie_jar:
+            _LOGGER.debug("Cookie after authorize: %s", cookie.key)
+            if cookie.key == "_csrf":
+                csrf_value = cookie.value
+                break
+
+        if not csrf_value:
+            raise AquareaAuthError(
+                "No _csrf cookie after authorize – "
+                "OAUTH_AUDIENCE or APP_CLIENT_ID may be incorrect"
+            )
+        return csrf_value
 
     async def _oauth_credentials(
         self,
@@ -384,24 +437,44 @@ class AquareaClient:
         }
 
         async with self._session.post(
-            url, json=payload, headers=headers, ssl=True, allow_redirects=True
+            url,
+            json=payload,
+            headers=headers,
+            ssl=True,
+            allow_redirects=False,  # avoid following panasonic-iot-cfc:// redirects
         ) as resp:
+            status = resp.status
             body = await resp.text()
+            location = resp.headers.get("Location", "")
 
-        if resp.status == 401 or '"error"' in body.lower():
+        _LOGGER.debug(
+            "Credentials step: status=%d location=%s body_start=%s",
+            status, location[:80], body[:80],
+        )
+
+        if status == 401:
+            raise AquareaAuthError("Invalid username or password (401)")
+
+        # Auth0 signals wrong credentials with a 302 back to the login page
+        # or with an error in the body
+        if "wrong-email-or-password" in body or "wrong-email-or-password" in location:
             raise AquareaAuthError("Invalid username or password")
 
-        if resp.status not in (200, 302):
+        if '"error"' in body and status != 200:
+            raise AquareaAuthError(f"Credentials rejected: {body[:200]}")
+
+        if status not in (200, 302):
             raise AquareaAuthError(
-                f"Credentials step failed ({resp.status}): {body[:200]}"
+                f"Credentials step failed ({status}): {body[:200]}"
             )
 
         parser = _HiddenFormParser()
         parser.feed(body)
         if not parser.fields:
             raise AquareaAuthError(
-                "No hidden form fields in login response – "
-                "check username/password or API changes"
+                "No hidden form fields in credentials response – "
+                "wrong password, or API flow changed. "
+                f"Response status={status}, body_start={body[:200]}"
             )
         _LOGGER.debug("Callback form fields: %s", list(parser.fields.keys()))
         return parser.fields

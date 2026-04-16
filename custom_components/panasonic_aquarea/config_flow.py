@@ -117,7 +117,7 @@ class AquareaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return await self._create_entry(device)
 
         device_options = {
-            d["deviceGuid"]: d.get("name", d["deviceGuid"])
+            d["deviceGuid"]: d.get("deviceName") or d.get("name") or d["deviceGuid"]
             for d in self._devices
         }
 
@@ -133,7 +133,7 @@ class AquareaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         await self._close_client()
 
         device_guid = device["deviceGuid"]
-        device_name = device.get("name") or DEFAULT_NAME
+        device_name = device.get("deviceName") or device.get("name") or DEFAULT_NAME
 
         await self.async_set_unique_id(device_guid)
         self._abort_if_unique_id_configured()

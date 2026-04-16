@@ -4,73 +4,81 @@ DOMAIN = "panasonic_aquarea"
 DEFAULT_NAME = "Panasonic Aquarea"
 MANUFACTURER = "Panasonic"
 
-# API
-API_BASE_URL = "https://aquarea-service.panasonic.com"
-API_LOGIN_PATH = "/remote/v1/api/auth/login"
-API_DEVICES_PATH = "/remote/v1/api/devices"
-API_DEVICE_STATUS_PATH = "/remote/v1/api/devices/{device_guid}/status"
+# ─── API backend (accsmart.panasonic.com) ────────────────────────────────────
+API_BASE_URL = "https://accsmart.panasonic.com"
+API_DEVICES_PATH = "/device/group"
+API_TRANSFER_PATH = "/remote/v1/app/common/transfer"
 
-# Headers
-API_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+# Aquarea device-level sub-API called through the transfer proxy
+API_DEVICE_STATUS_APINAME = "/remote/v1/api/devices?gwid={device_guid}&deviceDirect={direct}"
+API_DEVICE_CONTROL_APINAME = "/remote/v1/api/devices/{device_guid}/status"
+
+# ─── OAuth2 / Auth0 ───────────────────────────────────────────────────────────
+AUTH_BASE_URL = "https://authglb.digital.panasonic.com"
+AUTH_AUTHORIZE_PATH = "/authorize"
+AUTH_LOGIN_PATH = "/usernamepassword/login"
+AUTH_CALLBACK_PATH = "/login/callback"
+AUTH_TOKEN_PATH = "/oauth/token"
+
+APP_CLIENT_ID = "Xmy6xIYIitMxngjB2rHvlm6HSDNnaMJx"
+APP_REDIRECT_URI = (
+    "panasonic-iot-cfc://authglb.digital.panasonic.com"
+    "/android/com.panasonic.ACCsmart/callback"
+)
+AUTH0_CLIENT_B64 = (
+    "eyJuYW1lIjoiQXV0aDAuQW5kcm9pZCIsImVudiI6eyJhbmRyb2lkIjoiMzAifSwidmVyc2lvbiI6IjIuOS4zIn0="
+)
+OAUTH_SCOPE = "openid offline_access comfortcloud.control a2w.control"
+OAUTH_AUDIENCE = "https://digital.panasonic.com/api/v2/"
+OAUTH_TENANT = "pdpauthglb-a1"
+
+# Panasonic client-ID endpoint (returns clientId after auth)
+API_ACC_LOGIN_PATH = "/auth/v2/login"
+
+# ─── HTTP Client ─────────────────────────────────────────────────────────────
+API_USER_AGENT = "okhttp/4.10.0"
+AUTH_USER_AGENT = (
+    "Mozilla/5.0 (Linux; Android 10; K) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/120.0.0.0 Safari/537.36"
+    "Chrome/114.0.0.0 Mobile Safari/537.36"
 )
 API_APP_TYPE = "1"
-API_APP_VERSION = "1.35.0"
+API_APP_VERSION = "4.1.0"
 
-# Update interval in seconds
-DEFAULT_SCAN_INTERVAL = 60
+# ─── Integration settings ────────────────────────────────────────────────────
+DEFAULT_SCAN_INTERVAL = 60  # seconds
 
-# Config / entry keys
 CONF_DEVICE_GUID = "device_guid"
 CONF_DEVICE_NAME = "device_name"
 
-# Coordinator key
 COORDINATOR = "coordinator"
 DEVICE_INFO = "device_info"
 
-# Platforms
 PLATFORMS = ["climate", "water_heater", "sensor", "switch"]
 
-# ─── Operation Status ───────────────────────────────────────────────────────
+# ─── Operation Status ────────────────────────────────────────────────────────
 OPERATION_STATUS_OFF = 0
 OPERATION_STATUS_ON = 1
 
-# ─── Operation Modes ────────────────────────────────────────────────────────
+# ─── Operation Modes ─────────────────────────────────────────────────────────
 OPERATION_MODE_HEAT = 0
 OPERATION_MODE_COOL = 1
 OPERATION_MODE_AUTO = 2
-OPERATION_MODE_DHW = 3       # Hot water only
-OPERATION_MODE_HEAT_DHW = 4  # Heat + hot water
-OPERATION_MODE_COOL_DHW = 5  # Cool + hot water
-OPERATION_MODE_AUTO_DHW = 6  # Auto + hot water
+OPERATION_MODE_DHW = 3
+OPERATION_MODE_HEAT_DHW = 4
+OPERATION_MODE_COOL_DHW = 5
+OPERATION_MODE_AUTO_DHW = 6
 
-HA_MODE_TO_AQUAREA = {
-    "heat": OPERATION_MODE_HEAT,
-    "cool": OPERATION_MODE_COOL,
-    "auto": OPERATION_MODE_AUTO,
-    "heat_dhw": OPERATION_MODE_HEAT_DHW,
-    "cool_dhw": OPERATION_MODE_COOL_DHW,
-    "auto_dhw": OPERATION_MODE_AUTO_DHW,
-}
+# ─── Zone Control Modes ───────────────────────────────────────────────────────
+ZONE_CTRL_WATER_TEMP = 0
+ZONE_CTRL_ROOM_TEMP = 1
+ZONE_CTRL_COMPENSATION = 2
 
-AQUAREA_MODE_TO_HA = {v: k for k, v in HA_MODE_TO_AQUAREA.items()}
-
-# ─── Zone Heat/Cool Control Mode ────────────────────────────────────────────
-ZONE_CTRL_WATER_TEMP = 0     # Water temperature setpoint
-ZONE_CTRL_ROOM_TEMP = 1      # Room temperature setpoint
-ZONE_CTRL_COMPENSATION = 2   # Compensation curve
-
-# ─── Tank Boost ──────────────────────────────────────────────────────────────
+# ─── Tank / Switch flags ──────────────────────────────────────────────────────
 TANK_BOOST_OFF = 0
 TANK_BOOST_ON = 1
-
-# ─── Holiday / Away Mode ─────────────────────────────────────────────────────
 HOLIDAY_MODE_OFF = 0
 HOLIDAY_MODE_ON = 1
-
-# ─── Force Heater ────────────────────────────────────────────────────────────
 FORCE_HEATER_OFF = 0
 FORCE_HEATER_ON = 1
 
@@ -86,7 +94,7 @@ ZONE_ROOM_COOL_TEMP_MAX = 35.0
 TANK_TEMP_MIN = 40.0
 TANK_TEMP_MAX = 75.0
 
-# ─── Sensor / entity attribute keys ──────────────────────────────────────────
+# ─── Sensor keys ─────────────────────────────────────────────────────────────
 ATTR_OUTDOOR_TEMP = "outdoor_temperature"
 ATTR_OPERATION_MODE = "operation_mode"
 ATTR_ERROR_STATUS = "error_status"

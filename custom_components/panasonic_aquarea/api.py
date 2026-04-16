@@ -35,7 +35,6 @@ from .const import (
     AUTH_LOGIN_PATH,
     AUTH_TOKEN_PATH,
     AUTH_USER_AGENT,
-    OAUTH_AUDIENCE,
     OAUTH_SCOPE,
     OAUTH_TENANT,
 )
@@ -358,7 +357,6 @@ class AquareaClient:
             "code_challenge": challenge,
             "code_challenge_method": "S256",
             "state": state,
-            "audience": OAUTH_AUDIENCE,
         }
         current_url = f"{AUTH_BASE_URL}/authorize?{urlencode(params)}"
         _LOGGER.debug("Authorize URL (truncated): %s", current_url[:120])
@@ -460,7 +458,6 @@ class AquareaClient:
             "tenant": OAUTH_TENANT,
             "response_type": "code",
             "scope": OAUTH_SCOPE,
-            "audience": OAUTH_AUDIENCE,
             "_csrf": csrf,
             "state": state,
             "username": username,

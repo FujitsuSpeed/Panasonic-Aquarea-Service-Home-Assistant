@@ -388,11 +388,11 @@ class AquareaClient:
                             "Empty Location header in authorize redirect"
                         )
 
-                    # Custom URI scheme → Auth0 already has an active session
-                    # and is returning the authorization code directly.
-                    if not location.startswith(("http://", "https://")):
+                    # Custom URI scheme → Auth0 has active session, code returned directly
+                    if location.startswith("panasonic-iot-cfc://"):
                         return None, self._extract_code_from_redirect(location)
 
+                    # Standard HTTP/relative redirect – keep following
                     current_url = (
                         location
                         if location.startswith("http")
